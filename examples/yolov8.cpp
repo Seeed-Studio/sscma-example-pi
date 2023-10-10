@@ -47,11 +47,13 @@ struct GridAndStride
     int stride;
 };
 
-class YoloV8
+class YOLOV8
 {
 public:
-    YoloV8();
-    int load(int target_size);
+    YOLOV8();
+    int load_param(const char *path);
+    int load_model(const char *path);
+    int init(int imgsz, int num_threads = 1, float *mean = 0, float *norm = 0);
     int detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_threshold = 0.4f, float nms_threshold = 0.5f);
     int draw(cv::Mat &rgb, const std::vector<Object> &objects);
 
@@ -107,14 +109,14 @@ static void qsort_descent_inplace(std::vector<Object> &faceobjects, int left, in
         }
     }
 
-    //     #pragma omp parallel sections
+#pragma omp parallel sections
     {
-        //         #pragma omp section
+#pragma omp section
         {
             if (left < j)
                 qsort_descent_inplace(faceobjects, left, j);
         }
-        //         #pragma omp section
+#pragma omp section
         {
             if (i < right)
                 qsort_descent_inplace(faceobjects, i, right);
@@ -186,7 +188,7 @@ static void generate_grids_and_stride(const int target_w, const int target_h, st
 static void generate_proposals(std::vector<GridAndStride> grid_strides, const ncnn::Mat &pred, float prob_threshold, std::vector<Object> &objects)
 {
     const int num_points = grid_strides.size();
-    const int num_class = 20;
+    const int num_class = 80;
     const int reg_max_1 = 16;
 
     for (int i = 0; i < num_points; i++)
@@ -264,38 +266,53 @@ static void generate_proposals(std::vector<GridAndStride> grid_strides, const nc
     }
 }
 
-YoloV8::YoloV8()
-{
-}
-
-int YoloV8::load(int _target_size)
+YOLOV8::YOLOV8()
 {
     yolo.clear();
+    mean_vals[0] = 0;
+    mean_vals[1] = 0;
+    mean_vals[2] = 0;
+    norm_vals[0] = 1 / 255.f;
+    norm_vals[1] = 1 / 255.f;
+    norm_vals[2] = 1 / 255.f;
+}
+
+int YOLOV8::load_param(const char *path)
+{
+    return yolo.load_param(path);
+}
+
+int YOLOV8::load_model(const char *path)
+{
+    return yolo.load_model(path);
+}
+
+int YOLOV8::init(int imgsz, int num_threads, float *mean, float *norm)
+{
 
     yolo.opt = ncnn::Option();
 
-    yolo.opt.num_threads = 1;
+    yolo.opt.num_threads = num_threads;
 
-    //yolo.opt.use_vulkan_compute = true;
+    target_size = imgsz;
 
-    // yolo.opt.use_packing_layout = true;
-    // yolo.opt.use_bf16_storage = true;
-
-    yolo.load_param("/home/pi/ncnn/model/yolov8.ncnn.param");
-    yolo.load_model("/home/pi/ncnn/model/yolov8.ncnn.bin");
-
-    target_size = _target_size;
-    mean_vals[0] = 103.53f;
-    mean_vals[1] = 116.28f;
-    mean_vals[2] = 123.675f;
-    norm_vals[0] = 1.0 / 255.0f;
-    norm_vals[1] = 1.0 / 255.0f;
-    norm_vals[2] = 1.0 / 255.0f;
+    if (mean != 0)
+    {
+        mean_vals[0] = mean[0];
+        mean_vals[1] = mean[1];
+        mean_vals[2] = mean[2];
+    }
+    if (norm != 0)
+    {
+        norm_vals[0] = norm[0];
+        norm_vals[1] = norm[1];
+        norm_vals[2] = norm[2];
+    }
 
     return 0;
 }
 
-int YoloV8::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_threshold, float nms_threshold)
+int YOLOV8::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_threshold, float nms_threshold)
 {
     int width = rgb.cols;
     int height = rgb.rows;
@@ -320,24 +337,28 @@ int YoloV8::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_
     ncnn::Mat in = ncnn::Mat::from_pixels_resize(rgb.data, ncnn::Mat::PIXEL_RGB2BGR, width, height, w, h);
 
     // pad to target_size rectangle
-   // pad to target_size rectangle
-   int wpad = (w + 31) / 32 * 32 - w;
-    int hpad = (h + 31) / 32 * 32 - h;
+
+    int wpad = 640 - w;
+    int hpad = 640 - h;
     ncnn::Mat in_pad;
     ncnn::copy_make_border(in, in_pad, hpad / 2, hpad - hpad / 2, wpad / 2, wpad - wpad / 2, ncnn::BORDER_CONSTANT, 0.f);
 
-    //printf("in_pad w h c: %d %d %d\n", in_pad.w, in_pad.h, in_pad.c);
-
-    in_pad.substract_mean_normalize(0, norm_vals);
+    in_pad.substract_mean_normalize(mean_vals, norm_vals);
 
     ncnn::Extractor ex = yolo.create_extractor();
 
-    ex.input("in0", in_pad);
+    ex.input("images", in_pad);
 
     std::vector<Object> proposals;
 
     ncnn::Mat out;
-    ex.extract("out0", out);
+    auto start = high_resolution_clock::now();
+    ex.extract("output", out);
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<milliseconds>(stop - start);
+    // Calculate frames per second
+    double fps = 1000 / duration.count();
+    std::cout << "Estimated frames per second : " << fps << ":" << duration.count() << std::endl;
 
     std::vector<int> strides = {8, 16, 32}; // might have stride=64
     std::vector<GridAndStride> grid_strides;
@@ -389,14 +410,11 @@ int YoloV8::detect(const cv::Mat &rgb, std::vector<Object> &objects, float prob_
     return 0;
 }
 
-int YoloV8::draw(cv::Mat &rgb, const std::vector<Object> &objects)
+int YOLOV8::draw(cv::Mat &rgb, const std::vector<Object> &objects)
 {
     for (size_t i = 0; i < objects.size(); i++)
     {
         const Object &obj = objects[i];
-
-        //         fprintf(stderr, "%d = %.5f at %.2f %.2f %.2f x %.2f\n", obj.label, obj.prob,
-        //                 obj.rect.x, obj.rect.y, obj.rect.width, obj.rect.height);
 
         cv::rectangle(rgb, obj.rect, cv::Scalar(255, 0, 0));
 
@@ -423,46 +441,33 @@ int YoloV8::draw(cv::Mat &rgb, const std::vector<Object> &objects)
     return 0;
 }
 
-YoloV8 yolov8;
-int target_size = 640; // 416; //320;  must be divisible by 32.
-
 int main(int argc, char **argv)
 {
     const char *imagepath = argv[1];
     cv::VideoCapture cap;
     cv::Mat m;
-    yolov8.load(target_size);
-    cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
-    cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
-    // cap.set(cv::CAP_PROP_FPS, 25);
-    // cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M','J','P','G'));
-    // open the default camera, use something different from 0 otherwise;
-    // Check VideoCapture documentation.
 
     if (!cap.open("/home/pi/ncnn/images/pedestrians.mp4"))
         return 0;
-
+    YOLOV8 yolov8;
+    yolov8.load_param("/home/pi/sscma-example-pi/models/yolov8n.param");
+    yolov8.load_model("/home/pi/sscma-example-pi/models/yolov8n.bin");
+    yolov8.init(640, 4);
     std::vector<Object> objects;
     // Start and end times
-    time_t start, end;
-    double fps;
     for (;;)
     {
         // Start time
-        // auto start = high_resolution_clock::now();
-        auto start = high_resolution_clock::now();
-        cap.read(m);
+        cap >> m;
 
         if (m.empty())
             break; // end of video stream
 
         yolov8.detect(m, objects); // recognize the objects
-        auto stop = high_resolution_clock::now();
-        auto duration = duration_cast<microseconds>(stop - start);
-        std::cout << "fps: " << 1000000 / duration.count() << std::endl;
+
         yolov8.draw(m, objects); // show the outcome
 
-        cv::imshow("RPi5 - 1.95 GHz - 2 GB ram", m);
+        cv::imshow("RPi4 - 1.95 GHz - 2 GB ram", m);
 
         if (cv::waitKey(1) == 27)
             break; // stop capturing by pressing ESC
