@@ -153,7 +153,8 @@ struct _GstSscmaYolov5
 
   int rate_n; /**< framerate is in fraction, which is numerator/denominator */
   int rate_d; /**< framerate is in fraction, which is numerator/denominator */
-  
+  GstTensorsInfo input_info; /**< input tensor info */
+
   GstSscmaYolov5Properties prop; /**< NNFW plugin's properties */
 };
 

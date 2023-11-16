@@ -138,7 +138,7 @@ static gboolean gst_sscma_yolov5_parse_caps (GstSscmaYolov5 * self,
 static gboolean gst_sscma_yolov5_update_caps (GstSscmaYolov5 * self);
 
 static void nms (GArray * results, gfloat threshold);
-static void draw (GstMapInfo * out_info, GstSscmaYolov5Properties *prop, GArray * results);
+static void draw (GstMapInfo * out_info, GstSscmaYolov5 *self, GArray * results);
 /* initialize the sscmayolov5's class */
 static void
 gst_sscma_yolov5_class_init (GstSscmaYolov5Class * klass)
@@ -158,6 +158,11 @@ gst_sscma_yolov5_class_init (GstSscmaYolov5Class * klass)
   g_object_class_install_property (gobject_class, PROP_MODEL,
       g_param_spec_string ("model", "Model filepath",
           "File path to the model file. Separated with ',' in case of multiple model files(like caffe2)",
+          "", G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_INPUT,
+      g_param_spec_string ("input", "Input dimension",
+          "Input tensor dimension from inner array (Max rank #NNS_TENSOR_RANK_LIMIT)",
           "", G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_OUTPUT,
@@ -682,7 +687,7 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 {
   GstSscmaYolov5 *self = GST_SWIFT_YOLOV5 (parent);
   GstSscmaYolov5Properties *prop = &self->prop;
-  GstBuffer *inbuf, *outbuf;
+  GstBuffer *inbuf;
   GstMapInfo src_info, dest_info;
   GstTensorsInfo *info;
   GstTensorInfo *_info;
@@ -707,14 +712,13 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 
   /* 2. preprocess data */
   // g_assert (self->tensors_configured);
-  info = &prop->input_meta;
+  info = &self->input_info;
   color = info->info[0].dimension[0];
   width = info->info[0].dimension[1];
   height = info->info[0].dimension[2];
   type = tensor_element_size[info->info[0].type];
   /** type * colorspace * width * height */
   frame_size = type * color * width * height;
-
   /** supposed 1 frame in buffer */
   g_assert ((buf_size / frame_size) == 1);
 
@@ -739,16 +743,9 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   }
 
   /* 3. inference*/
-  for (uint i = 0; i < prop->input_meta.num_tensors; ++i) {
-    std::vector<int64_t> input_shape;
-
+  for (uint i = 0; i < self->input_info.num_tensors; ++i) {
     _info = gst_tensors_info_get_nth_info (info, i);
-
-    input_shape.assign (&_info->dimension[0], &_info->dimension[0] + NNS_TENSOR_RANK_LIMIT);
-    input_shape.resize (prop->input_ranks[i]);
-    std::reverse (input_shape.begin (), input_shape.end ());
-
-    in_pad = ncnn::Mat::from_pixels_resize(src_info.data, ncnn::Mat::PIXEL_RGB, input_shape[1], input_shape[2],input_shape[1],input_shape[2]);
+    in_pad = ncnn::Mat::from_pixels_resize(src_info.data, ncnn::Mat::PIXEL_RGB, width, height, prop->input_meta.info[i].dimension[1], prop->input_meta.info[i].dimension[2]);
     const float norm_vals[3] = {1 / 255.f, 1 / 255.f, 1 / 255.f};
     in_pad.substract_mean_normalize(0, norm_vals);
     ex.input("in0", in_pad);
@@ -810,29 +807,15 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   nms (results, 0.25);
 
   /* 5. draw box */
-  outbuf = gst_buffer_new_and_alloc (frame_size);
-  gst_buffer_memset (outbuf, 0, 0, frame_size);
-  if (!gst_buffer_map (outbuf, &dest_info, GST_MAP_WRITE)) {
-    g_print
-        ("tensor_converter: Cannot map dest buffer at tensor_converter/video. The outgoing buffer (GstBuffer) for the srcpad of tensor_converter cannot be mapped for writing.\n");
-    gst_buffer_unmap (buf, &src_info);
-    goto error;
-  }
-
-  memcpy (dest_info.data, src_info.data, dest_info.size);
-  gst_buffer_unmap (buf, &src_info);
-  gst_buffer_unref (buf);
   // TODO：支持多个输出格式 主要是RGB RGBA
-  draw (&dest_info, prop, results);
+  draw (&src_info, self, results);
   g_array_free (results, TRUE);
   
-  gst_buffer_unmap (outbuf, &dest_info);
-  return gst_pad_push (self->srcpad, outbuf);
+  gst_buffer_unmap (buf, &src_info);
+  return gst_pad_push (self->srcpad, buf);
 error:
   if (inbuf)
     gst_buffer_unref (inbuf);
-  if (outbuf)
-    gst_buffer_unref (outbuf);
   gst_buffer_unref (buf);
   return GST_FLOW_ERROR;
 }
@@ -1039,7 +1022,7 @@ gst_sscma_yolov5_parse_caps (GstSscmaYolov5 * self,
     return FALSE;
   }
   // self->tensors_configured = TRUE;
-  self->prop.input_meta = info;
+  self->input_info = info;
   return TRUE;
 }
 
@@ -1053,7 +1036,7 @@ gst_sscma_yolov5_update_caps (GstSscmaYolov5 * self)
   GstCaps *curr_caps, *out_caps;
   gboolean ret = FALSE;
 
-  info = &self->prop.input_meta;
+  info = &self->input_info;
   // out cap is ANY
   out_caps = gst_caps_new_any ();
 
@@ -1150,13 +1133,17 @@ nms (GArray * results, gfloat threshold)
  * @param[in] results The final results to be drawn.
  */
 static void
-draw (GstMapInfo * out_info, GstSscmaYolov5Properties *prop, GArray * results)
+draw (GstMapInfo * out_info, GstSscmaYolov5 *self, GArray * results)
 {
+  GstSscmaYolov5Properties *prop = &self->prop;
   uint8_t *frame = (uint8_t *) out_info->data;        /* Let's draw per pixel (4bytes) */
   unsigned int i;
-  guint color = prop->input_meta.info[0].dimension[0];
-  guint width = prop->input_meta.info[0].dimension[1];
-  guint height = prop->input_meta.info[0].dimension[2];
+  guint color = self->input_info.info[0].dimension[0];
+  guint width = self->input_info.info[0].dimension[1];
+  guint height = self->input_info.info[0].dimension[2];
+  guint widthi = prop->input_meta.info[0].dimension[1];
+  guint heighti = prop->input_meta.info[0].dimension[2];
+  
   for (i = 0; i < results->len; i++) {
     int x1, x2, y1, y2;         /* Box positions on the output surface */
     int j;
@@ -1171,10 +1158,10 @@ draw (GstMapInfo * out_info, GstSscmaYolov5Properties *prop, GArray * results)
     }
 
     /* 1. Draw Boxes */
-    x1 =  a->x;
-    x2 = MIN (width - 1, (a->x + a->width));
-    y1 = a->y;
-    y2 = MIN (height - 1,(a->y + a->height));
+    x1 =  a->x * width / widthi;
+    x2 = MIN (width - 1, (a->x + a->width)) * width / widthi;
+    y1 = a->y * height / heighti;
+    y2 = MIN (height - 1,(a->y + a->height)) * height / heighti;
     /* 1-1. Horizontal */
     pos1 = &frame[(y1 * width + x1) * 3];
     pos2 = &frame[(y2 * width + x1) * 3];

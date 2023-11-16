@@ -58,10 +58,11 @@ gst-inspect-1.0 sscmayolov5
 
 ### 运行推理插件
 ```bash
-sscma_yolov5 model={model_path},{weights_path} output={output} outputtype={outputtype} labels={labels_path}
+sscma_yolov5 model={model_path},{weights_path} input={input} output={output} outputtype={outputtype} labels={labels_path}
 
 Options:
    --model=model_path,weights_path         Path to model file (default: ../models/sscma-yolov8/model.param) weights file (default: ../models/sscma-yolov8/model.bin)
+   --input=input                           Path to model input format (default: 3:320:320)
    --output=output                         Path to model output format (default: 85:6300:1:1)
    --outputtype=outputtype                 Path to model output type (default: float32)
    --labels=labels_path                    Path to model labels file (default: ../models/sscma-yolov8/coco.txt)
@@ -70,14 +71,15 @@ Options:
 ```bash
   gst-launch-1.0 \
   v4l2src name=cam_src ! videoconvert ! videoscale ! \
-    video/x-raw,width=320,height=320,format=RGB,pixel-aspect-ratio=1/1,framerate=15/1 \
-    ! sscma_yolov5 model=net/epoch_300_float.ncnn.bin,net/epoch_300_float.ncnn.param \
-    output=85:6300:1:1 outputtype=float32 labels=net/coco.txt !\
-    video/x-raw,width=320,height=320,format=RGB ! videoconvert ! ximagesink sync=false
+    video/x-raw,width=1280,height=720,format=RGB,pixel-aspect-ratio=1/1,framerate=30/1 \
+    ! sscma_yolov5 model=net/epoch_300_float.ncnn.bin,net/epoch_300_float.ncnn.param input=3:320:320 output=85:6300:1:1 outputtype=float32 labels=net/coco.txt !\
+    videoconvert ! ximagesink sync=false
 ```
 #### 说明
-其中v4l2src name=cam_src为获取摄像头实时视频流，video/x-raw,width=320,height=320,format=RGB,pixel-aspect-ratio=1/1,framerate=15/1为摄像头输出格式，
-sscma_yolov5为此插件，videoconvert为格式转换，ximagesink为显示窗口，sync=false为异步显示。
+其中v4l2src name=cam_src为获取摄像头实时视频流，也可以改为任意视频文件路径，
+videoconvert为自动格式转换，videoscale为自动缩放，
+video/x-raw,width=1280,height=720,format=RGB,pixel-aspect-ratio=1/1,framerate=30/1为指定输出格式，分辨大小可为任意，但是必须为RGB格式，后续会支持更多格式。
+sscma_yolov5为此插件，ximagesink为显示窗口，sync=false为异步显示，也可以任意插件输出到其他平台。
 
 ## 注意事项
 
@@ -93,6 +95,6 @@ sscma_yolov5为此插件，videoconvert为格式转换，ximagesink为显示窗�
 [gstreamer](https://gstreamer.freedesktop.org)
 
 ## 待办事项
-- [ ] 插件支持任意输入尺寸
+- [X] 插件支持任意输入尺寸
 - [ ] 推理结果阈值可配置，模型输出是否归一化可配置
 - [ ] 自动匹配两种输出格式 1：输出带框原始图片 2：输出json格式结果
