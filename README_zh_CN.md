@@ -1,6 +1,6 @@
 # 树莓派上部署经过SSCMA训练的模型
 
-本文将介绍如何将经过SSCMA训练的模型部署到树莓派，并使用NCNN作为推理引擎。
+本文将介绍如何将经过SSCMA训练的模型通过gstreamer插件的形式部署到树莓派，并使用NCNN作为推理引擎。
 
 ## 前提条件
 
@@ -8,7 +8,8 @@
 
 1. 一个树莓派设备，已正确安装并配置好操作系统。
 2. 已成功安装NCNN库和相关依赖项。可以在[NCNN GitHub](https://github.com/Tencent/ncnn)上找到安装说明。
-3. 经过SSCMA训练的模型文件（含配置文件和权重文件）。
+3. 经过SSCMA训练的模型文件（含配置文件，权重文件和标签文件）。
+4. 安装好meson和ninja编译工具，以及gstreamer。参考[这里](https://gstreamer.freedesktop.org/documentation/installing/on-linux.html?gi-language=c)。
 
 ## 步骤
 
@@ -33,39 +34,50 @@
 ## 示例
 
 ### 编译工程
+将ncnn编译为静态库
 ```bash
 git clone https://github.com/Seeed-Studio/sscma-example-pi --recursive
-cd sscma-example-pi
-mkdir build
-cd build
-cmake ..
-make
+cd components/ncnn
+mkdir -p build-aarch64-linux-gnu
+pushd build-aarch64-linux-gnu
+cmake -DCMAKE_TOOLCHAIN_FILE=../toolchains/aarch64-linux-gnu.toolchain.cmake ..
+make -j4
+make install
+popd
+```
+编译拷贝gst-sscma-yolov5插件
+```bash
+meson build
+ninja -C build
+cp ./build/libgstsscmayolov5.so /usr/lib/aarch64-linux-gnu/gstreamer-1.0/
+```
+一切顺利后将能在gst-inspect-1.0中看到插件信息
+```bash
+gst-inspect-1.0 sscmayolov5
 ```
 
-### 运行推理应用程序
+### 运行推理插件
 ```bash
-./sscma-yolov5 
-Usage: program_name --model=model_path --weights=weights_path --input=input_path --output=output_path [--thread=thread_num] [--save] [--show] [--classes=class1,class2,class3]...
+sscma_yolov5 model={model_path},{weights_path} output={output} outputtype={outputtype} labels={labels_path}
+
 Options:
-  --model=model_path         Path to model file (default: ../models/sscma-yolov8/model.param)
-  --weights=weights_path     Path to weights file (default: ../models/sscma-yolov8/model.bin)
-  --input=input_path         Path to input file
-  --output=output_path       Path to output file
-  --thread=thread_num        Number of threads (default: 1)
-  --iou=iou_threshold        IoU threshold (default: 0.45)
-  --score=score_threshold    Score threshold (default: 0.25)
-  --save                     Save result to file (default: false)
-  --headless                 Do not show result (default: false)
-  --classes=class1           List of classes to detect (default: all classes)
-  --input_mean=0,0,0         Input mean (default: 0,0,0)
-  --input_std=1,1,1          Input std (default: 0.0039126,0039126,0039126)
-  --input_shape=1,3,640,640  Input shape (default: 1,3,640,640)
+   --model=model_path,weights_path         Path to model file (default: ../models/sscma-yolov8/model.param) weights file (default: ../models/sscma-yolov8/model.bin)
+   --output=output                         Path to model output format (default: 85:6300:1:1)
+   --outputtype=outputtype                 Path to model output type (default: float32)
+   --labels=labels_path                    Path to model labels file (default: ../models/sscma-yolov8/coco.txt)
 ```
-
+### 示例
 ```bash
-./sscma-yolov5 --model ../models/yolov5s/yolov5s.param --weights ../models/yolov5s/yolov5s.bin --input ../images/dog.jpg
+  gst-launch-1.0 \
+  v4l2src name=cam_src ! videoconvert ! videoscale ! \
+    video/x-raw,width=320,height=320,format=RGB,pixel-aspect-ratio=1/1,framerate=15/1 \
+    ! sscma_yolov5 model=net/epoch_300_float.ncnn.bin,net/epoch_300_float.ncnn.param \
+    output=85:6300:1:1 outputtype=float32 labels=net/coco.txt !\
+    video/x-raw,width=320,height=320,format=RGB ! videoconvert ! ximagesink sync=false
 ```
-
+#### 说明
+其中v4l2src name=cam_src为获取摄像头实时视频流，video/x-raw,width=320,height=320,format=RGB,pixel-aspect-ratio=1/1,framerate=15/1为摄像头输出格式，
+sscma_yolov5为此插件，videoconvert为格式转换，ximagesink为显示窗口，sync=false为异步显示。
 
 ## 注意事项
 
@@ -78,3 +90,9 @@ Options:
 ## 参考资料
 [SSCMA](https://github.com/Seeed-Studio/SSCMA)
 [NCNN](https://github.com/Tencent/ncnn)
+[gstreamer](https://gstreamer.freedesktop.org)
+
+## 待办事项
+- [ ] 插件支持任意输入尺寸
+- [ ] 推理结果阈值可配置，模型输出是否归一化可配置
+- [ ] 自动匹配两种输出格式 1：输出带框原始图片 2：输出json格式结果
