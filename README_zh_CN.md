@@ -40,7 +40,7 @@ git clone https://github.com/Seeed-Studio/sscma-example-pi --recursive
 cd components/ncnn
 mkdir -p build-aarch64-linux-gnu
 pushd build-aarch64-linux-gnu
-cmake -DCMAKE_TOOLCHAIN_FILE=../toolchains/aarch64-linux-gnu.toolchain.cmake ..
+cmake -DCMAKE_TOOLCHAIN_FILE=../toolchains/aarch64-linux-gnu.toolchain.cmake -DNCNN_OPENMP=OFF..
 make -j4
 make install
 popd
