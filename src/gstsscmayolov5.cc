@@ -722,7 +722,7 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   /** supposed 1 frame in buffer */
   g_assert ((buf_size / frame_size) == 1);
 
-  if (!gst_buffer_map (buf, &src_info, GST_MAP_READ)) {
+  if (!gst_buffer_map (buf, &src_info, GST_MAP_READ | GST_MAP_WRITE)) {
     g_print
         ("tensor_converter: Cannot map src buffer at tensor_converter/video. The incoming buffer (GstBuffer) for the sinkpad of tensor_converter cannot be mapped for reading.\n");
     goto error;
