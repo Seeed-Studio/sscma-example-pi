@@ -9,7 +9,8 @@
 1. 一个树莓派设备，已正确安装并配置好操作系统。
 2. 已成功安装NCNN库和相关依赖项。可以在[NCNN GitHub](https://github.com/Tencent/ncnn)上找到安装说明。
 3. 经过SSCMA训练的模型文件（含配置文件，权重文件和标签文件）。
-4. 安装好meson和ninja编译工具，以及gstreamer。参考[这里](https://gstreamer.freedesktop.org/documentation/installing/on-linux.html?gi-language=c)。
+4. 安装gstreamer。参考[这里](https://gstreamer.freedesktop.org/documentation/installing/on-linux.html?gi-language=c)。
+5. 安装meson和ninja编译工具。参考[这里](https://mesonbuild.com/Getting-meson.html)。
 
 ## 步骤
 
@@ -31,6 +32,26 @@
 
    将编译生成的可执行文件传输到树莓派上，并在终端中运行该应用程序。您可以根据需要提供输入图像或其他输入数据，并查看推理结果。
 
+5. 使用csi摄像头作为输入时，需要确认摄像头是否打开
+
+   ```bash
+   sudo raspi-config
+   ```
+
+   选择Interfacing Options -> Camera -> Yes -> OK -> Finish -> Yes -> OK -> Reboot Now
+
+   重启后使用以下命令确认摄像头是否打开
+   在没有raspi-config没有camera选项时，可以在/boot/config.txt中注释掉
+   ```bash
+   camera-auto-detect=0
+   ```
+   重启后使用以下命令确认摄像头是否打开
+   ```bash
+   vcgencmd get_camera
+   ```
+
+   如果返回supported=1 detected=1则摄像头已打开，否则请重新
+
 ## 示例
 
 ### 编译工程
@@ -49,7 +70,7 @@ popd
 ```bash
 meson build
 ninja -C build
-cp ./build/libgstsscmayolov5.so /usr/lib/aarch64-linux-gnu/gstreamer-1.0/
+sudo cp ./build/libgstsscmayolov5.so /usr/lib/aarch64-linux-gnu/gstreamer-1.0/
 ```
 一切顺利后将能在gst-inspect-1.0中看到插件信息
 ```bash
