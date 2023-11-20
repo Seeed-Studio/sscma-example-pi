@@ -1273,7 +1273,7 @@ draw (GstMapInfo * out_info, GstSscmaYolov5 *self, GArray * results)
         char_index = '*';
       }
       char_index -= 32;
-      if ((x1 + 8) > (int) width)
+      if ((x1 + 8 * 3) > (int) width)
         break;                /* Stop drawing if it may overfill */
       pos2 = pos1;
       for (y2 = 0; y2 < 13; y2++) {
@@ -1281,11 +1281,11 @@ draw (GstMapInfo * out_info, GstSscmaYolov5 *self, GArray * results)
         for (x2 = 0; x2 < 8; x2++) {
           /* 8: character width */
           *(pos2 + x2 * 3) = rasters[char_index][13-y2] & (1 << (7 - x2)) ?
-              PIXEL_VALUE : 0;
+              PIXEL_VALUE : *(pos2 + x2 * 3);
         }
         pos2 += width * 3;
       }
-      x1 += 9;
+      x1 += 9 * 3;
       pos1 += 9 * 3;              /* charater width + 1px */
     }
   }
