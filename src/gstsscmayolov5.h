@@ -132,6 +132,8 @@ typedef struct _GstSscmaYolov5Properties
   uint total_labels; /**< The number of loaded labels */
   uint max_word_length; /**< The max size of labels */
 
+  float threshold[3]; /**< The threshold for detection */
+  
   int input_configured; /**< TRUE if input tensor is configured. Use int instead of gboolean because this is refered by custom plugins. */
   GstTensorsInfo input_meta; /**< configured input tensor info */
   tensors_layout input_layout; /**< data layout info provided as a property to sscma_yolov5 for the input, defaults to _NNS_LAYOUT_ANY for all the tensors */

@@ -79,14 +79,15 @@ gst-inspect-1.0 sscmayolov5
 
 ### 运行推理插件
 ```bash
-sscma_yolov5 model={model_path},{weights_path} input={input} output={output} outputtype={outputtype} labels={labels_path}
+sscma_yolov5 model={model_path},{weights_path} input={input} output={output} outputtype={outputtype} labels={labels_path} threshold=2500:0.25
 
 Options:
-   --model=model_path,weights_path         Path to model file (default: ../models/sscma-yolov8/model.param) weights file (default: ../models/sscma-yolov8/model.bin)
+   --model=model_path,weights_path         Path to model file
    --input=input                           Path to model input format (default: 3:320:320)
    --output=output                         Path to model output format (default: 85:6300:1:1)
    --outputtype=outputtype                 Path to model output type (default: float32)
-   --labels=labels_path                    Path to model labels file (default: ../models/sscma-yolov8/coco.txt)
+   --labels=labels_path                    Path to model labels file
+   --threshold=threshold:threshold         Path to model threshold (default: 2500:0.25)
 ```
 ### 示例
 ```bash

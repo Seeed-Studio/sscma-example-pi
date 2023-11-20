@@ -89,6 +89,7 @@ enum
   PROP_OUTPUTTYPE,
   PROP_MODEL,
   PROP_MODE_LABELS,
+  PROP_THRESHOLD,
   PROP_OUTPUTRANKS
 };
 
@@ -183,6 +184,11 @@ gst_sscma_yolov5_class_init (GstSscmaYolov5Class * klass)
   g_object_class_install_property (gobject_class, PROP_MODE_LABELS,
       g_param_spec_string ("labels", "Labels file",
           "Configure the Labels file path.", "",
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_THRESHOLD,
+      g_param_spec_string ("threshold", "Threshold",
+          "Configure the threshold for detection.", "",
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_SILENT,
@@ -471,6 +477,47 @@ _gtfc_setprop_TYPE (GstSscmaYolov5 * priv,
   return 0;
 }
 
+/** @brief Handle "PROP_THRESHOLD" for set-property */
+static gint
+_gtfc_setprop_THRESHOLD (GstSscmaYolov5 * priv,
+    const GValue * value)
+{
+  GstSscmaYolov5Properties *prop;
+  gchar **str_thresholds, **options;
+  guint num_thresholds, noptions;
+  guint i, j;
+
+  prop = &priv->prop;
+
+  if (value) {
+    str_thresholds = g_strsplit_set (g_value_get_string (value), ",", -1);
+    num_thresholds = g_strv_length (str_thresholds);
+
+    if (num_thresholds > 0) {
+      if (num_thresholds > 2) {
+        g_print ("Invalid param, thresholds (%d) max (2)\n", num_thresholds);
+        num_thresholds = 2;
+      }
+
+      for (i = 0; i < num_thresholds; i++) {
+        options = g_strsplit (str_thresholds[i], ":", -1);
+        noptions = g_strv_length (options);
+        if (noptions > 3)
+        {
+          g_print ("Invalid param, options (%d) max (3)\n", noptions);
+          noptions = 3;
+        }
+        for (j = 0; j < noptions; j++)
+        {
+           prop->threshold[i] = g_ascii_strtod (options[i], NULL);
+        }
+      }
+    }
+    g_strfreev (str_thresholds);
+  }
+  return 0;
+}
+
 static void
 gst_sscma_yolov5_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
@@ -509,6 +556,10 @@ gst_sscma_yolov5_set_property (GObject * object, guint prop_id,
     // 输出类型 outputtype=float32
     case PROP_OUTPUTTYPE:
       status = _gtfc_setprop_TYPE (self, value, FALSE);
+      break;
+    // 输出结果阈值及框图阈值 threshold=0.5:0.3
+    case PROP_THRESHOLD:
+      status = _gtfc_setprop_THRESHOLD (self, value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -762,7 +813,6 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
     max_index_val = 0;
     max_index = 0;
     // Find the class with the maximum confidence
-    // todo: 可配置阈值
     for (int i = DETECTION_NUM_INFO; i < prop->total_labels; ++i) {
       if (data[delect_num * cIdx_max + i] > max_index_val) {
         max_index_val = data[delect_num * cIdx_max + i];
@@ -771,8 +821,7 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
     }
 
     // If the maximum confidence is greater than the threshold, then the result is valid
-    // TODO ：可配置阈值
-    if (max_index_val * data[delect_num * cIdx_max + 4] > 2500) {
+    if (max_index_val * data[delect_num * cIdx_max + 4] > prop->threshold[0]) {
       detectedObject object;
       float cx, cy, w, h;
       cx = data[delect_num * cIdx_max + 0];
@@ -803,8 +852,7 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   /* clear inbuf */
   gst_buffer_unmap (inbuf, &dest_info);
   gst_buffer_unref (inbuf);
-  // todo: 可配置阈值
-  nms (results, 0.25);
+  nms (results, prop->threshold[1]);
 
   /* 5. draw box */
   // TODO：支持多个输出格式 主要是RGB RGBA
