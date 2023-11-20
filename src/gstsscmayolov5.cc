@@ -117,6 +117,7 @@ GST_ELEMENT_REGISTER_DEFINE (sscma_yolov5, "sscma_yolov5", GST_RANK_NONE,
 
 ncnn::Net net;
 
+static void gst_properties_init(GstSscmaYolov5Properties *prop);
 static void gst_sscma_yolov5_set_property (GObject * object,
     guint prop_id, const GValue * value, GParamSpec * pspec);
 static void gst_sscma_yolov5_get_property (GObject * object,
@@ -253,8 +254,34 @@ gst_sscma_yolov5_init (GstSscmaYolov5 * self)
   gst_tensors_info_init (&prop->input_meta);
   gst_tensors_layout_init (prop->input_layout);
   gst_tensors_rank_init (prop->input_ranks);
+  gst_properties_init (prop);
 }
 
+/**
+ * @brief Function to initialize GstSscmaYolov5Properties.
+ */
+static void
+gst_properties_init(GstSscmaYolov5Properties *prop)
+{
+  prop->model_files = NULL;
+  prop->num_models = 0;
+  prop->labels = NULL;
+  prop->total_labels = 0;
+  prop->max_word_length = 0;
+  prop->threshold[0] = 2500;
+  prop->threshold[1] = 0.25;
+  prop->threshold[2] = 0;
+  prop->input_configured = FALSE;
+  prop->output_configured = FALSE;
+  prop->input_meta.num_tensors = 1;
+  prop->input_ranks[0] = gst_tensor_parse_dimension ("3:320:320",
+          prop->input_meta.info[0].dimension);
+
+  prop->output_meta.num_tensors = 1;
+  prop->output_ranks[0] = gst_tensor_parse_dimension ("85:6300:1:1",
+          prop->output_meta.info[0].dimension);
+  prop->output_meta.info[0].type = _TENOR_FLOAT32;
+}
 /**
  * @brief Function to finalize instance.
  */
