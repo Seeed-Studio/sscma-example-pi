@@ -32,26 +32,6 @@
 
    将编译生成的可执行文件传输到树莓派上，并在终端中运行该应用程序。您可以根据需要提供输入图像或其他输入数据，并查看推理结果。
 
-5. 使用csi摄像头作为输入时，需要确认摄像头是否打开
-
-   ```bash
-   sudo raspi-config
-   ```
-
-   选择Interfacing Options -> Camera -> Yes -> OK -> Finish -> Yes -> OK -> Reboot Now
-
-   重启后使用以下命令确认摄像头是否打开
-   在没有raspi-config没有camera选项时，可以在/boot/config.txt中注释掉
-   ```bash
-   camera-auto-detect=0
-   ```
-   重启后使用以下命令确认摄像头是否打开
-   ```bash
-   vcgencmd get_camera
-   ```
-
-   如果返回supported=1 detected=1则摄像头已打开，否则请重新
-
 ## 示例
 
 ### 编译工程
@@ -93,9 +73,9 @@ Options:
 ```bash
   gst-launch-1.0 \
   v4l2src name=cam_src ! videoconvert ! videoscale ! \
-    video/x-raw,width=1280,height=720,format=RGB,pixel-aspect-ratio=1/1,framerate=30/1 \
-    ! sscma_yolov5 model=net/epoch_300_float.ncnn.bin,net/epoch_300_float.ncnn.param input=3:320:320 output=85:6300:1:1 outputtype=float32 labels=net/coco.txt !\
-    videoconvert ! ximagesink sync=false
+    video/x-raw,width=1280,height=720,format=RGB,pixel-aspect-ratio=1/1,framerate=30/1 ! \
+    sscma_yolov5 model=net/epoch_300_float.ncnn.bin,net/epoch_300_float.ncnn.param labels=net/coco.txt ! \
+    videoconvert ! autovideosink
 ```
 #### 说明
 其中v4l2src name=cam_src为获取摄像头实时视频流，也可以改为任意视频文件路径，
