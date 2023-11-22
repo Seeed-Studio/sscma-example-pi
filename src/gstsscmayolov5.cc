@@ -649,6 +649,7 @@ gst_sscma_yolov5_sink_event (GstPad * pad, GstObject * parent,
       break;
     }
     default:
+      ret = gst_pad_event_default (pad, parent, event);
       break;
   }
 
