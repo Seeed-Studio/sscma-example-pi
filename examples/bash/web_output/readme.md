@@ -28,3 +28,6 @@
     ```bash
     <source src="http://localhost:8000/playlist.m3u8" type="application/x-mpegURL" />
     ```
+
+## result 
+![result](./web.png)

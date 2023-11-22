@@ -28,3 +28,6 @@
     ```bash
     <img id="videoImage" src="http://localhost:8000//output.jpg" width="320" height="240">
     ```
+
+## result 
+![result](./web_img.png)
