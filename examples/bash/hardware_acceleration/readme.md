@@ -1,5 +1,5 @@
 ## Hardware Acceleration
-###configure gpu memory
+### configure gpu memory
 ```bash
 sudo raspi-config
 ```
@@ -25,21 +25,24 @@ vcgencmd get_mem gpu
 ### preformance
 1. v4l2src directly output h264 stream, then use v4l2h264dec to decode h264 stream(v4l2src.sh)
 ```bash
-gst-launch-1.0 v4l2src ! video/x-h264,width=1280,height=720,framerate=30/1 ! queue ! h264parse config-interval=1 ! v4l2h264dec ! v4l2convert  ! xvimagesink sync=false 
+gst-launch-1.0 v4l2src ! video/x-h264,width=1280,height=720,framerate=30/1 ! h264parse config-interval=1 ! queue ! v4l2h264dec ! v4l2convert ! xvimagesink sync=false 
 ```
-cpu usage: about 30%-50%
+cpu usage: about 50%
 video delay: about 1 second
+![result](./v4l2src.png)
 
 2. v4l2src output yuv stream, then use x264enc to encode h264 stream, then use avdec_h264 to decode h264 stream(x264enc.sh)
 ```bash
-gst-launch-1.0 v4l2src ! videoconvert ! videoscale ! video/x-raw,width=1280,height=720,framerate=30/1,format=YVYU ! videoconvert ! x264enc ! 'video/x-h264,level=(string)4.2' ! h264parse config-interval=1 ! avdec_h264 ! videoconvert ! xvimagesink sync=false  
+gst-launch-1.0 v4l2src ! timeoverlay ! videoconvert ! videoscale ! video/x-raw,width=1280,height=720,framerate=30/1,format=YVYU ! videoconvert ! queue ! x264enc ! h264parse config-interval=1 ! avdec_h264 ! videoconvert ! xvimagesink sync=false  
 ```
 cpu usage: more than 100%
 video delay: more than 8 seconds
+![result](./x264enc.png)
 
 3. v4l2src output yuv stream, then use v4l2h264enc to encode h264 stream, then use v4l2h264dec to decode h264 stream(v4l2enc.sh)
 ```bash
-gst-launch-1.0 v4l2src ! v4l2convert  ! videoscale ! video/x-raw,width=1280,height=720,framerate=30/1,format=YVYU ! v4l2convert  ! v4l2h264enc ! 'video/x-h264,level=(string)4.2' ! h264parse config-interval=1 ! v4l2h264dec ! v4l2convert  ! xvimagesink sync=false   
+gst-launch-1.0 v4l2src ! timeoverlay  ! v4l2convert ! videoscale ! video/x-raw,width=1280,height=720,framerate=30/1,format=YVYU ! v4l2convert ! queue ! v4l2h264enc ! 'video/x-h264,level=(string)4.2' ! h264parse config-interval=1 ! v4l2h264dec ! v4l2convert ! xvimagesink sync=false  
 ```
-cpu usage: about 30%-50%
+cpu usage: about 70%
 video delay: less than 1 second
+![result](./v4l2enc.png)
