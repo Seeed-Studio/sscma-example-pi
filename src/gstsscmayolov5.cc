@@ -201,19 +201,19 @@ gst_sscma_yolov5_class_init (GstSscmaYolov5Class * klass)
       "FIXME:Generic",
       "swift yolov5", "qian <<ruiqian.tang@seeed.org>>");
 
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&src_factory));
+  /* set src pad template */
+  pad_caps = gst_caps_new_empty ();
+  append_video_caps_template (pad_caps);
+  pad_template = gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
+      pad_caps);
+  gst_element_class_add_pad_template (gstelement_class, pad_template);
 
-  gst_element_class_add_pad_template (gstelement_class,
-      gst_static_pad_template_get (&sink_factory));
   /* set sink pad template */
-  // pad_caps = gst_caps_new_empty ();
-  // append_video_caps_template (pad_caps);
-
-  // pad_template = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS,
-  //     pad_caps);
-  // gst_element_class_add_pad_template (gstelement_class, pad_template);
-  // gst_caps_unref (pad_caps);
+  append_video_caps_template (pad_caps);
+  pad_template = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS,
+      pad_caps);
+  gst_element_class_add_pad_template (gstelement_class, pad_template);
+  gst_caps_unref (pad_caps);
 }
 
 /* initialize the new element
@@ -296,6 +296,7 @@ gst_sscma_yolov5_finalize (GObject * object)
 
   // gst_tensor_filter_common_close_fw (prop);
   gst_tensors_info_free (&prop->input_meta);
+  gst_tensors_info_free (&prop->output_meta);
   // 释放 self->net 内存
   self->net.clear();
   G_OBJECT_CLASS (parent_class)->finalize (object);
@@ -675,12 +676,12 @@ gst_sscma_yolov5_sink_query (GstPad * pad, GstObject * parent,
       GstCaps *filter;
 
       gst_query_parse_caps (query, &filter);
-      // TODO:输入应固定为模型需要的视频大小
-      // caps = gst_caps_new_any ();
-      // gst_query_set_caps_result (query, caps);
-      // gst_caps_unref (caps);
-      ret = gst_pad_query_default (pad, parent, query);
-
+      caps = gst_caps_new_empty ();
+      gst_caps_append (caps, gst_caps_from_string (VIDEO_CAPS_STR));
+      gst_query_set_caps_result (query, caps);
+      gst_caps_unref (caps);
+      ret = TRUE;
+      break;
     }
     case GST_QUERY_ACCEPT_CAPS:
     {
@@ -729,15 +730,11 @@ gst_sscma_yolov5_src_query (GstPad * pad, GstObject * parent,
 
       gst_query_parse_caps (query, &filter);
 
-      caps = gst_caps_new_simple("video/x-raw",
-                                        "width", G_TYPE_INT, 320,
-                                        "height", G_TYPE_INT, 320,
-                                        "format", G_TYPE_STRING, "RGB",
-                                        NULL);
+      caps = gst_caps_new_empty ();
+      gst_caps_append (caps, gst_caps_from_string (VIDEO_CAPS_STR));
       gst_query_set_caps_result (query, caps);
       gst_caps_unref (caps);
       ret = TRUE;
-      ret = gst_pad_query_default (pad, parent, query);
       break;
     }
     default:

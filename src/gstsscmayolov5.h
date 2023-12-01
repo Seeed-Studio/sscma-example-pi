@@ -71,15 +71,11 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SSCMAYOLOV5))
 #define GST_SWIFT_YOLOV5_CAST(obj)  ((GstSscmaYolov5 *)(obj))
 
-#define GST_TENSOR_CAP_DEFAULT \
-    "other/tensor" ", " \
-    "framerate = (fraction) [ 0, max ]"
-
 /**
  * @brief Caps string for supported video format
  */
 #define VIDEO_CAPS_STR \
-    GST_VIDEO_CAPS_MAKE ("{ RGB, BGR, RGBx, BGRx, xRGB, xBGR, RGBA, BGRA, ARGB, ABGR, GRAY8, GRAY16_BE, GRAY16_LE }") \
+    GST_VIDEO_CAPS_MAKE ("{ RGB}") \
     ", interlace-mode = (string) progressive"
 
 #define append_video_caps_template(caps) \
