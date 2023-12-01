@@ -25,19 +25,22 @@ cd gst-plugins-rs/net/webrtc/signaling
 WEBRTCSINK_SIGNALLING_SERVER_LOG=debug cargo run --bin gst-webrtc-signalling-server
 ```
 
-3. open another terminal and run the webrtc sink
+3. open another terminal and run web server
 ```bash
 cd gst-plugins-rs/net/webrtc/gstwebrtc-api
 npm install
 npm start
 ```
 
-4. open another terminal and run the webrtc source
+4. open another terminal and run the webrtc sink
 ```bash
 echo "export GST_PLUGIN_PATH=<path-to-gst-plugins-rs>/target/debug:$GST_PLUGIN_PATH" >> ~/.bashrc
 source ~/.bashrc
 ./run.sh
 ```
+
+5. open a browser and visit http://localhost:9090
+  You will see the video from the camera under the title "Remote Streams"
 
 ## Results
 ![webrtc_sink](./webrtc_sink.png)
