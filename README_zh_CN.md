@@ -11,6 +11,7 @@
 3. 经过SSCMA训练的模型文件（含配置文件，权重文件和标签文件）。
 4. 安装gstreamer。参考[这里](https://gstreamer.freedesktop.org/documentation/installing/on-linux.html?gi-language=c)。
 5. 安装meson和ninja编译工具。参考[这里](https://mesonbuild.com/Getting-meson.html)。
+6. 安装json-glib库。参考[这里](https://wiki.gnome.org/Projects/JsonGlib)。
 
 ## 步骤
 

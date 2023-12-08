@@ -25,6 +25,8 @@ gstbase_dep = dependency('gstreamer-base-1.0', version : '>=1.19',
   fallback : ['gstreamer', 'gst_base_dep'])
 gst_video_dep = dependency('gstreamer-video-1.0')
 
+json_glib_dep = dependency('json-glib-1.0')
+
 
 # The sscmayolov5 Plugin
  gstsscmayolov5_sources = [
@@ -43,7 +45,7 @@ library_include_dir = 'components/ncnn/build-aarch64-linux-gnu/install/include/n
 gstsscmayolov5 = library('gstsscmayolov5',
   gstsscmayolov5_sources,
   include_directories : [gstsscmayolov5_include_dirs, library_include_dir],
-  dependencies : [gst_dep, gstbase_dep, gst_video_dep, library_dep],
+  dependencies : [gst_dep, gstbase_dep, gst_video_dep, library_dep, json_glib_dep],
   install : true,
   install_dir : sscmayolov5_install_dir,
   c_args: ['-fpermissive',plugin_c_args],

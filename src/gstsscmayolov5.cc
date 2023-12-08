@@ -63,6 +63,7 @@
 #include <gst/gst.h>
 #include <gst/base/base.h>
 #include <gst/controller/controller.h>
+#include <json-glib/json-glib.h>
 
 #include "gstsscmayolov5.h"
 #include "tensor_info.h"
@@ -97,17 +98,6 @@ enum
  *
  * describe the real formats here.
  */
-static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE ("src",
-    GST_PAD_SRC,
-    GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("ANY")
-    );
-
-static GstStaticPadTemplate sink_factory = GST_STATIC_PAD_TEMPLATE ("sink",
-    GST_PAD_SINK,
-    GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("ANY")
-    );
 
 #define gst_sscma_yolov5_parent_class parent_class
 G_DEFINE_TYPE (GstSscmaYolov5, gst_sscma_yolov5, GST_TYPE_ELEMENT);
@@ -137,10 +127,11 @@ static GstCaps * gst_sscma_yolov5_query_caps (GstSscmaYolov5 * self, GstPad * pa
     GstCaps * filter);
 static gboolean gst_sscma_yolov5_parse_caps (GstSscmaYolov5 * self,
     const GstCaps * caps);
-static gboolean gst_sscma_yolov5_update_caps (GstSscmaYolov5 * self);
+static gboolean gst_sscma_yolov5_update_caps (GstSscmaYolov5 * self, GstCaps * in_caps);
 
 static void nms (GArray * results, gfloat threshold);
 static void draw (GstMapInfo * out_info, GstSscmaYolov5 *self, GArray * results);
+static guint convert_json (char ** outbuf, GstMapInfo imgdata, GArray * results);
 /* initialize the sscmayolov5's class */
 static void
 gst_sscma_yolov5_class_init (GstSscmaYolov5Class * klass)
@@ -196,24 +187,27 @@ gst_sscma_yolov5_class_init (GstSscmaYolov5Class * klass)
       g_param_spec_boolean ("silent", "Silent", "Produce verbose output ?",
           FALSE, G_PARAM_READWRITE));
 
-  gst_element_class_set_static_metadata (gstelement_class,
-      "SscmaYolov5",
-      "FIXME:Generic",
-      "swift yolov5", "qian <<ruiqian.tang@seeed.org>>");
-
   /* set src pad template */
   pad_caps = gst_caps_new_empty ();
   append_video_caps_template (pad_caps);
+  append_text_caps_template (pad_caps);
   pad_template = gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
       pad_caps);
   gst_element_class_add_pad_template (gstelement_class, pad_template);
+  gst_caps_unref (pad_caps);
 
   /* set sink pad template */
+  pad_caps = gst_caps_new_empty ();
   append_video_caps_template (pad_caps);
   pad_template = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS,
       pad_caps);
   gst_element_class_add_pad_template (gstelement_class, pad_template);
   gst_caps_unref (pad_caps);
+
+  gst_element_class_set_static_metadata (gstelement_class,
+      "SscmaYolov5",
+      "FIXME:Generic",
+      "swift yolov5", "qian <<ruiqian.tang@seeed.org>>");
 }
 
 /* initialize the new element
@@ -638,15 +632,13 @@ gst_sscma_yolov5_sink_event (GstPad * pad, GstObject * parent,
     {
       GstCaps *in_caps;
       gst_event_parse_caps (event, &in_caps);
-
       if (gst_sscma_yolov5_parse_caps (self, in_caps)) {
-        // ret = gst_sscma_yolov5_update_caps (self);
+        ret = gst_sscma_yolov5_update_caps (self, in_caps);
         gst_event_unref (event);
       } else {
         gst_event_unref (event);
-        // ret = FALSE;
+        ret = FALSE;
       }
-      ret = gst_pad_event_default (pad, parent, event);
       break;
     }
     default:
@@ -673,12 +665,17 @@ gst_sscma_yolov5_sink_query (GstPad * pad, GstObject * parent,
     case GST_QUERY_CAPS:
     {
       GstCaps *caps;
-      GstCaps *filter;
+      GstCaps *filter, *srccaps;
 
       gst_query_parse_caps (query, &filter);
-      caps = gst_caps_new_empty ();
-      gst_caps_append (caps, gst_caps_from_string (VIDEO_CAPS_STR));
+      // if next sink pad is text pad, then return video caps to last element
+      srccaps = gst_pad_peer_query_caps (self->srcpad, filter);
+      if (srccaps == NULL || gst_caps_is_empty (gst_sscma_yolov5_query_caps (self, pad, srccaps)))
+        caps = gst_sscma_yolov5_query_caps (self, pad, filter);
+      else
+        caps = gst_sscma_yolov5_query_caps (self, pad, srccaps);
       gst_query_set_caps_result (query, caps);
+      gst_caps_unref (srccaps);
       gst_caps_unref (caps);
       ret = TRUE;
       break;
@@ -688,19 +685,16 @@ gst_sscma_yolov5_sink_query (GstPad * pad, GstObject * parent,
       GstCaps *caps;
       GstCaps *template_caps;
       gboolean res = FALSE;
-      // TODO:根据下一个插件选择输出类型
-      // gst_query_parse_accept_caps (query, &caps);
 
-      // if (gst_caps_is_fixed (caps)) {
-      //   template_caps = gst_pad_get_pad_template_caps (pad);
+      gst_query_parse_accept_caps (query, &caps);
 
-      //   res = gst_caps_can_intersect (template_caps, caps);
-      //   gst_caps_unref (template_caps);
-      // }
-
-      // gst_query_set_accept_caps_result (query, res);
-      ret = gst_pad_query_default (pad, parent, query);
-
+      if (gst_caps_is_fixed (caps)) {
+        template_caps = gst_pad_get_pad_template_caps (pad);
+        res = gst_caps_can_intersect (template_caps, caps);
+        gst_caps_unref (template_caps);
+      }
+      gst_query_set_accept_caps_result (query, res);
+      break;
     }
     default:
       ret = gst_pad_query_default (pad, parent, query);
@@ -726,13 +720,13 @@ gst_sscma_yolov5_src_query (GstPad * pad, GstObject * parent,
     case GST_QUERY_CAPS:
     {
       GstCaps *caps;
-      GstCaps *filter;
-
+      GstCaps *filter, *sinkcaps;
       gst_query_parse_caps (query, &filter);
-
-      caps = gst_caps_new_empty ();
-      gst_caps_append (caps, gst_caps_from_string (VIDEO_CAPS_STR));
+      sinkcaps = gst_pad_peer_query_caps (self->sinkpad, filter);
+      caps = gst_sscma_yolov5_query_caps (self, pad, sinkcaps);
+      append_text_caps_template (caps);
       gst_query_set_caps_result (query, caps);
+      gst_caps_unref (sinkcaps);
       gst_caps_unref (caps);
       ret = TRUE;
       break;
@@ -862,10 +856,10 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
       //   h *= (float) height;
       // }
 
-      object.x = (int) (MAX (0.f, (cx - w / 2.f)));
-      object.y = (int) (MAX (0.f, (cy - h / 2.f)));
-      object.width = (int) (MIN ((float) width, w));
-      object.height = (int) (MIN ((float) height, h));
+      object.x = (int) (MAX (0.f, (cx - w / 2.f))) * width / prop->input_meta.info[0].dimension[1];
+      object.y = (int) (MAX (0.f, (cy - h / 2.f))) * height / prop->input_meta.info[0].dimension[2];
+      object.width = (int) (MIN ((float) width, w)) * width / prop->input_meta.info[0].dimension[1];
+      object.height = (int) (MIN ((float) height, h)) * height / prop->input_meta.info[0].dimension[2];
 
       object.prob = max_index_val * data[delect_num * cIdx_max + 4];
       object.class_id = max_index - DETECTION_NUM_INFO;
@@ -879,13 +873,42 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   gst_buffer_unref (inbuf);
   nms (results, prop->threshold[1]);
 
-  /* 5. draw box */
-  // TODO：支持多个输出格式 主要是RGB RGBA
-  draw (&src_info, self, results);
-  g_array_free (results, TRUE);
-  
-  gst_buffer_unmap (buf, &src_info);
-  return gst_pad_push (self->srcpad, buf);
+  /* 5. draw box or convert json */
+  GstCaps *sink_caps, *src_caps;
+  sink_caps = gst_pad_get_current_caps (self->sinkpad);
+  src_caps = gst_pad_get_current_caps (self->srcpad);
+  if(gst_caps_is_equal(sink_caps, src_caps)) {
+    // TODO：支持多个输出格式 主要是RGB RGBA
+    draw (&src_info, self, results);
+    g_array_free (results, TRUE);
+    
+    gst_buffer_unmap (buf, &src_info);
+    return gst_pad_push (self->srcpad, buf);
+  }
+  else{
+    GstBuffer *outbuf;
+    gchar *outbuf_data;
+    guint outbuf_size;
+
+    outbuf_size = convert_json (&outbuf_data, src_info, results);
+    outbuf = gst_buffer_new_and_alloc (outbuf_size);
+    gst_buffer_map (outbuf, &dest_info, GST_MAP_WRITE);
+    if (outbuf_size)
+      memcpy (&dest_info.data[0], outbuf_data, outbuf_size);
+
+    /* clear inbuf */
+    g_array_free (results, TRUE);
+    g_free (outbuf_data);
+
+    gst_buffer_copy_into (outbuf, buf,
+      GST_BUFFER_COPY_FLAGS | GST_BUFFER_COPY_TIMESTAMPS |
+      GST_BUFFER_COPY_METADATA, 0, -1);
+
+    gst_buffer_unmap (buf, &src_info);
+    gst_buffer_unref (buf);
+    gst_buffer_unmap (outbuf, &dest_info);
+    return gst_pad_push (self->srcpad, outbuf);
+  }
 error:
   if (inbuf)
     gst_buffer_unref (inbuf);
@@ -1024,21 +1047,6 @@ gst_sscma_yolov5_query_caps (GstSscmaYolov5 * self, GstPad * pad,
     caps = gst_pad_get_pad_template_caps (pad);
   }
 
-  if (pad == self->sinkpad) {
-    GstCaps *media_caps;
-
-    // media_caps = gst_sscma_yolov5_get_possible_media_caps (self);
-    if (media_caps) {
-      /* intersect with pad caps */
-      GstCaps *tmp = gst_caps_intersect_full (media_caps, caps,
-          GST_CAPS_INTERSECT_FIRST);
-      gst_caps_unref (caps);
-      caps = tmp;
-
-      gst_caps_unref (media_caps);
-    }
-  }
-
   if (filter) {
     GstCaps *intersection;
     intersection =
@@ -1103,17 +1111,20 @@ gst_sscma_yolov5_parse_caps (GstSscmaYolov5 * self,
  * @brief Update src pad caps from tensors config.
  */
 static gboolean
-gst_sscma_yolov5_update_caps (GstSscmaYolov5 * self)
+gst_sscma_yolov5_update_caps (GstSscmaYolov5 * self, GstCaps * in_caps)
 {
-  GstTensorsInfo *info;
   GstCaps *curr_caps, *out_caps;
+  GstCaps *src_caps;
   gboolean ret = FALSE;
 
-  info = &self->input_info;
-  // out cap is ANY
-  out_caps = gst_caps_new_any ();
+  src_caps = gst_pad_peer_query_caps (self->srcpad, NULL);
+  if (gst_caps_can_intersect (in_caps, src_caps))
+    out_caps = gst_sscma_yolov5_query_caps (self, self->srcpad, in_caps);
+  else{
+    out_caps = gst_sscma_yolov5_query_caps (self, self->srcpad, src_caps);
+  }
+  gst_caps_unref (src_caps);
 
-  /* Update src pad caps if it is different. */
   curr_caps = gst_pad_get_current_caps (self->srcpad);
   if (curr_caps == NULL || !gst_caps_is_equal (curr_caps, out_caps)) {
     ret = gst_pad_set_caps (self->srcpad, out_caps);
@@ -1201,8 +1212,7 @@ nms (GArray * results, gfloat threshold)
 
 /**
  * @brief Draw with the given results (objects[MOBILENET_SSD_DETECTION_MAX]) to the output buffer
- * @param[out] out_info The output buffer (RGBA plain)
- * @param[in] prop The bounding-box internal data.
+ * @param[out] out_info The output buffer (RGB plain)
  * @param[in] results The final results to be drawn.
  */
 static void
@@ -1214,8 +1224,6 @@ draw (GstMapInfo * out_info, GstSscmaYolov5 *self, GArray * results)
   guint color = self->input_info.info[0].dimension[0];
   guint width = self->input_info.info[0].dimension[1];
   guint height = self->input_info.info[0].dimension[2];
-  guint widthi = prop->input_meta.info[0].dimension[1];
-  guint heighti = prop->input_meta.info[0].dimension[2];
   
   for (i = 0; i < results->len; i++) {
     int x1, x2, y1, y2;         /* Box positions on the output surface */
@@ -1231,10 +1239,10 @@ draw (GstMapInfo * out_info, GstSscmaYolov5 *self, GArray * results)
     }
 
     /* 1. Draw Boxes */
-    x1 =  a->x * width / widthi;
-    x2 = MIN (width - 1, (a->x + a->width)) * width / widthi;
-    y1 = a->y * height / heighti;
-    y2 = MIN (height - 1,(a->y + a->height)) * height / heighti;
+    x1 =  a->x;
+    x2 = MIN (width - 1, (a->x + a->width));
+    y1 = a->y ;
+    y2 = MIN (height - 1,(a->y + a->height));
     /* 1-1. Horizontal */
     pos1 = &frame[(y1 * width + x1) * 3];
     pos2 = &frame[(y2 * width + x1) * 3];
@@ -1288,6 +1296,80 @@ draw (GstMapInfo * out_info, GstSscmaYolov5 *self, GArray * results)
     }
   }
 }
+
+/**
+ * @brief Convert the given results (objects[MOBILENET_SSD_DETECTION_MAX]) to json format
+ * @param[out] outbuf The output buffer (json format)
+ * @param[in] imgdata The input buffer (RGB plain)
+ * @param[in] results The final results to be converted.
+ * 
+ * outbuf json format:
+ * {
+ *  "type": 1,
+ *  "name": "INVOKE",
+ *  "code": 0,
+ *  "data": {
+ *    "count": 8,
+ *    "perf": [8, 365, 0],
+ *    "boxes": [[87,83,77,65,70,0],[...]]
+*    "image": "<BASE64JPEG:String>"
+ *  }
+ * }
+ */
+static guint
+convert_json (char ** outbuf, GstMapInfo imgdata, GArray * results)
+{
+
+  JsonObject *json;
+  JsonNode *root;
+  JsonGenerator *generator;
+
+  /* imgdata to base64 */
+  g_autofree gchar *base64 = NULL;
+  gsize base64_len;
+  base64 = g_base64_encode (imgdata.data, imgdata.size);
+  base64_len = strlen (base64);
+
+  /* create json */
+  json = json_object_new ();
+  json_object_set_int_member (json, "type", 1);
+  json_object_set_string_member (json, "name", "INVOKE");
+  json_object_set_int_member (json, "code", 0);
+
+  JsonObject *data = json_object_new ();
+  json_object_set_int_member (data, "count", results->len);
+  json_object_set_int_member (data, "perf", 0);
+
+  JsonArray *boxes = json_array_new ();
+  for (guint i = 0; i < results->len; i++) {
+    detectedObject *a = &g_array_index (results, detectedObject, i);
+    JsonArray *box = json_array_new ();
+    json_array_add_int_element (box, a->x);
+    json_array_add_int_element (box, a->y);
+    json_array_add_int_element (box, a->width);
+    json_array_add_int_element (box, a->height);
+    json_array_add_int_element (box, a->tracking_id);
+    json_array_add_int_element (box, a->class_id);
+    json_array_add_array_element (boxes, box);
+  }
+  json_object_set_array_member (data, "boxes", boxes);
+  json_object_set_string_member (data, "image", base64);
+  json_object_set_object_member (json, "data", data);
+
+
+  /* convert JSON to string */
+  /* Make it the root node */
+  root = json_node_init_object (json_node_alloc (), json);
+  generator = json_generator_new ();
+  json_generator_set_indent (generator, 2);
+  json_generator_set_indent_char (generator, ' ');
+  json_generator_set_pretty (generator, TRUE);
+  json_generator_set_root (generator, root);
+  *outbuf = json_generator_to_data (generator, NULL);
+
+  return strlen (*outbuf);
+}
+
 /* entry point to initialize the plug-in
  * initialize the plug-in itself
  * register the element factories and other features

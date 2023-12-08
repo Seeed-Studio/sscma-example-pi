@@ -78,8 +78,16 @@ G_BEGIN_DECLS
     GST_VIDEO_CAPS_MAKE ("{ RGB}") \
     ", interlace-mode = (string) progressive"
 
+/**
+ * @brief Caps string for text input
+ */
+#define TEXT_CAPS_STR "text/x-json"
+
 #define append_video_caps_template(caps) \
     gst_caps_append (caps, gst_caps_from_string (VIDEO_CAPS_STR))
+
+#define append_text_caps_template(caps) \
+    gst_caps_append (caps, gst_caps_from_string (TEXT_CAPS_STR))
 
 #define DETECTION_NUM_INFO 5
 #define PIXEL_VALUE                             (0xFF) 
