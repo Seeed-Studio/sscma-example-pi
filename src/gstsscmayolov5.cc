@@ -131,7 +131,7 @@ static gboolean gst_sscma_yolov5_update_caps (GstSscmaYolov5 * self, GstCaps * i
 
 static void nms (GArray * results, gfloat threshold);
 static void draw (GstMapInfo * out_info, GstSscmaYolov5 *self, GArray * results);
-static guint convert_json (char ** outbuf, GstMapInfo imgdata, GArray * results);
+static guint convert_json (char ** outbuf, GstMapInfo imgdata, GArray * results, GArray * infer_time);
 /* initialize the sscmayolov5's class */
 static void
 gst_sscma_yolov5_class_init (GstSscmaYolov5Class * klass)
@@ -762,9 +762,10 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   GstTensorsInfo *info;
   GstTensorInfo *_info;
   gsize buf_size, frame_size, out_size, type;
+  guint32 timestamp, temp_time;
   guint color, width, height, max_index, cIdx_max;
   gfloat *data, max_index_val;
-  GArray *results = NULL;
+  GArray *results = NULL, *infer_time = NULL;
   // UNUSED (pad);
 
   ncnn::Mat in_pad;
@@ -813,15 +814,25 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   }
 
   /* 3. inference*/
+  timestamp = (guint32) (g_get_monotonic_time () / 1000);
+  infer_time = g_array_sized_new (FALSE, TRUE, sizeof (guint32), 1);
   for (uint i = 0; i < self->input_info.num_tensors; ++i) {
     _info = gst_tensors_info_get_nth_info (info, i);
     in_pad = ncnn::Mat::from_pixels_resize(src_info.data, ncnn::Mat::PIXEL_RGB, width, height, prop->input_meta.info[i].dimension[1], prop->input_meta.info[i].dimension[2]);
+    temp_time = timestamp;
+    timestamp = (guint32) (g_get_monotonic_time () / 1000);
+    temp_time = timestamp - temp_time;
+    g_array_append_val (infer_time, temp_time);
     const float norm_vals[3] = {1 / 255.f, 1 / 255.f, 1 / 255.f};
     in_pad.substract_mean_normalize(0, norm_vals);
     ex.input("in0", in_pad);
     ex.extract("out0", out);
     g_assert (out.total() * out.elemsize == out_size);
     memcpy (dest_info.data, out.data, out_size);
+    temp_time = timestamp;
+    timestamp = (guint32) (g_get_monotonic_time () / 1000);
+    temp_time = timestamp - temp_time;
+    g_array_append_val (infer_time, temp_time);
   }
 
   /* 4. Post-processing of the data*/
@@ -868,6 +879,8 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
       g_array_append_val (results, object);
     }
   }
+  temp_time = (guint32) (g_get_monotonic_time () / 1000) - timestamp;
+  g_array_append_val (infer_time, temp_time);
   /* clear inbuf */
   gst_buffer_unmap (inbuf, &dest_info);
   gst_buffer_unref (inbuf);
@@ -890,7 +903,7 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
     gchar *outbuf_data;
     guint outbuf_size;
 
-    outbuf_size = convert_json (&outbuf_data, src_info, results);
+    outbuf_size = convert_json (&outbuf_data, src_info, results, infer_time);
     outbuf = gst_buffer_new_and_alloc (outbuf_size);
     gst_buffer_map (outbuf, &dest_info, GST_MAP_WRITE);
     if (outbuf_size)
@@ -898,6 +911,7 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 
     /* clear inbuf */
     g_array_free (results, TRUE);
+    g_array_free (infer_time, TRUE);
     g_free (outbuf_data);
 
     gst_buffer_copy_into (outbuf, buf,
@@ -1299,9 +1313,10 @@ draw (GstMapInfo * out_info, GstSscmaYolov5 *self, GArray * results)
 
 /**
  * @brief Convert the given results (objects[MOBILENET_SSD_DETECTION_MAX]) to json format
- * @param[out] outbuf The output buffer (json format)
+ * @param[in] outbuf The output buffer (json format)
  * @param[in] imgdata The input buffer (RGB plain)
  * @param[in] results The final results to be converted.
+ * @return The size of json format
  * 
  * outbuf json format:
  * {
@@ -1317,18 +1332,12 @@ draw (GstMapInfo * out_info, GstSscmaYolov5 *self, GArray * results)
  * }
  */
 static guint
-convert_json (char ** outbuf, GstMapInfo imgdata, GArray * results)
+convert_json (char ** outbuf, GstMapInfo imgdata, GArray * results, GArray * infer_time)
 {
 
   JsonObject *json;
   JsonNode *root;
   JsonGenerator *generator;
-
-  /* imgdata to base64 */
-  g_autofree gchar *base64 = NULL;
-  gsize base64_len;
-  base64 = g_base64_encode (imgdata.data, imgdata.size);
-  base64_len = strlen (base64);
 
   /* create json */
   json = json_object_new ();
@@ -1338,7 +1347,12 @@ convert_json (char ** outbuf, GstMapInfo imgdata, GArray * results)
 
   JsonObject *data = json_object_new ();
   json_object_set_int_member (data, "count", results->len);
-  json_object_set_int_member (data, "perf", 0);
+
+  JsonArray *perf = json_array_new ();
+  for (guint i = 0; i < infer_time->len; i++) {
+    json_array_add_int_element (perf, g_array_index (infer_time, guint, i));
+  }
+  json_object_set_array_member (data, "perf", perf);
 
   JsonArray *boxes = json_array_new ();
   for (guint i = 0; i < results->len; i++) {
@@ -1353,9 +1367,15 @@ convert_json (char ** outbuf, GstMapInfo imgdata, GArray * results)
     json_array_add_array_element (boxes, box);
   }
   json_object_set_array_member (data, "boxes", boxes);
-  json_object_set_string_member (data, "image", base64);
-  json_object_set_object_member (json, "data", data);
 
+  /* imgdata to base64 */
+  g_autofree gchar *base64 = NULL;
+  gsize base64_len;
+  base64 = g_base64_encode (imgdata.data, imgdata.size);
+  base64_len = strlen (base64);
+  json_object_set_string_member (data, "image", base64);
+
+  json_object_set_object_member (json, "data", data);
 
   /* convert JSON to string */
   /* Make it the root node */
