@@ -131,6 +131,7 @@ typedef struct _GstSscmaYolov5Properties
 {
   const char **model_files; /**< Filepath to the model file (as an argument for NNFW). char instead of gchar for non-glib custom plugins */
   int num_models; /**< number of model files. Some frameworks need multiple model files to initialize the graph (caffe, caffe2) */
+  int num_threads; /**< number of threads for NNFW */
 
   char **labels; /**< The list of loaded labels. Null if not loaded */
   uint total_labels; /**< The number of loaded labels */

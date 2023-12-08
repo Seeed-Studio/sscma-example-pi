@@ -91,7 +91,8 @@ enum
   PROP_MODEL,
   PROP_MODE_LABELS,
   PROP_THRESHOLD,
-  PROP_OUTPUTRANKS
+  PROP_OUTPUTRANKS,
+  PROP_NUMTHREADS
 };
 
 /* the capabilities of the outputs.
@@ -183,6 +184,11 @@ gst_sscma_yolov5_class_init (GstSscmaYolov5Class * klass)
           "Configure the threshold for detection.", "",
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_NUMTHREADS,
+      g_param_spec_int ("numthreads", "Number of threads",
+          "Number of threads for NNFW", 1, 4, 1,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   g_object_class_install_property (gobject_class, PROP_SILENT,
       g_param_spec_boolean ("silent", "Silent", "Produce verbose output ?",
           FALSE, G_PARAM_READWRITE));
@@ -259,6 +265,7 @@ gst_properties_init(GstSscmaYolov5Properties *prop)
 {
   prop->model_files = NULL;
   prop->num_models = 0;
+  prop->num_threads = 4;
   prop->labels = NULL;
   prop->total_labels = 0;
   prop->max_word_length = 0;
@@ -583,6 +590,14 @@ gst_sscma_yolov5_set_property (GObject * object, guint prop_id,
     case PROP_THRESHOLD:
       status = _gtfc_setprop_THRESHOLD (self, value);
       break;
+    // 配置线程数 numthreads=1
+    case PROP_NUMTHREADS:
+      status = 0;
+      if (g_value_get_int (value) > 0)
+        prop->num_threads = g_value_get_int (value);
+      else
+        status = -1;
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -824,6 +839,7 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
     temp_time = timestamp - temp_time;
     g_array_append_val (infer_time, temp_time);
     const float norm_vals[3] = {1 / 255.f, 1 / 255.f, 1 / 255.f};
+    ex.set_num_threads(prop->num_threads);
     in_pad.substract_mean_normalize(0, norm_vals);
     ex.input("in0", in_pad);
     ex.extract("out0", out);
