@@ -71,7 +71,7 @@ Options:
    --labels=labels_path                    Path to model labels file
    --threshold=threshold:threshold         Path to model threshold (default: 2500:0.25)
 ```
-### 示例
+### 示例1
 ```bash
   gst-launch-1.0 \
   v4l2src name=cam_src ! videoconvert ! videoscale ! \
@@ -84,6 +84,44 @@ Options:
 videoconvert为自动格式转换，videoscale为自动缩放，
 video/x-raw,width=1280,height=720,format=RGB,pixel-aspect-ratio=1/1,framerate=30/1为指定输出格式，分辨大小可为任意，但是必须为RGB格式，后续会支持更多格式。
 sscma_yolov5为此插件，ximagesink为显示窗口，sync=false为异步显示，也可以任意插件输出到其他平台。
+
+### 示例2
+```bash
+  gst-launch-1.0 \
+  v4l2src name=cam_src ! videoconvert ! videoscale ! \
+    sscma_yolov5 model=net/epoch_300_float.ncnn.bin,net/epoch_300_float.ncnn.param labels=net/coco.txt ! \
+    text/x-json ! \
+    multifilesink location=./result.json
+```
+#### 说明
+multifilesink为替换输出到文件，location=./result.json为输出文件路径，text/x-json为输出格式。
+输出格式为json格式，包含推理结果和推理耗时，如下所示：
+```json
+{
+  "type": 1,
+  "name": "INVOKE",
+  "code": 0,
+  "data": {
+    "count": 8, // 推理结果数量
+    "perf": [
+      8,       // 推理前处理耗时，单位ms
+      365,     // 推理耗时，单位ms
+      0        // 推理后处理耗时，单位ms
+    ],
+    "image": "<BASE64JPEG:String>" // 原始图片，base64编码
+    "boxes": [
+      [
+        87,
+        83,
+        77,
+        65,
+        70,
+        0
+      ]
+    ]
+  }
+}
+```
 
 ## 注意事项
 
@@ -101,4 +139,4 @@ sscma_yolov5为此插件，ximagesink为显示窗口，sync=false为异步显示
 ## 待办事项
 - [X] 插件支持任意输入尺寸
 - [ ] 推理结果阈值可配置，模型输出是否归一化可配置
-- [ ] 自动匹配两种输出格式 1：输出带框原始图片 2：输出json格式结果
+- [X] 自动匹配两种输出格式 1：输出带框原始图片 2：输出json格式结果
