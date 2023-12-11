@@ -92,7 +92,8 @@ enum
   PROP_MODE_LABELS,
   PROP_THRESHOLD,
   PROP_OUTPUTRANKS,
-  PROP_NUMTHREADS
+  PROP_NUMTHREADS,
+  PROP_IS_OUTPUT_SCALED
 };
 
 /* the capabilities of the outputs.
@@ -189,6 +190,11 @@ gst_sscma_yolov5_class_init (GstSscmaYolov5Class * klass)
           "Number of threads for NNFW", 1, 4, 1,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_IS_OUTPUT_SCALED,
+      g_param_spec_boolean ("is_output_scaled", "Is output scaled",
+          "Is output scaled", TRUE,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   g_object_class_install_property (gobject_class, PROP_SILENT,
       g_param_spec_boolean ("silent", "Silent", "Produce verbose output ?",
           FALSE, G_PARAM_READWRITE));
@@ -266,6 +272,7 @@ gst_properties_init(GstSscmaYolov5Properties *prop)
   prop->model_files = NULL;
   prop->num_models = 0;
   prop->num_threads = 4;
+  prop->is_output_scaled = TRUE;
   prop->labels = NULL;
   prop->total_labels = 0;
   prop->max_word_length = 0;
@@ -558,45 +565,48 @@ gst_sscma_yolov5_set_property (GObject * object, guint prop_id,
 
   prop = &self->prop;
   switch (prop_id) {
-    // 输入模型 mode=xxx,xxx（可为多个）
+    // input model :mode=xxx,xxx (can be multiple)
     case PROP_MODEL:
       status = _gtfc_setprop_MODEL (self, prop, value);
       break;
-    // 标签文件配置 labels=xxx
+    // label file path :labels=xxx
     case PROP_MODE_LABELS:
       status = _gtfc_setprop_LABELS (self, prop, value);
       break;
-    // 输入视频大小 input=320:320:3
+    // Input video size: input=320:320:3
     case PROP_INPUT:
       status = _gtfc_setprop_DIMENSION (self, value, TRUE);
       break;
-    // 模型输出大小 output=85:6300:1:1 注:第2个维度为识别结果个数 后面画框会用到
+    // Model output size: output=85:6300:1:1 
     case PROP_OUTPUT:
       status = _gtfc_setprop_DIMENSION (self, value, FALSE);
       break;
-    // TODO:输入格式 inputformat=RGB
+    // TODO:input format: inputformat=RGB
     case PROP_INPUTFORMAT:
       // status = _gtfc_setprop_FORMAT (self, value);
       break;
-    // 输出类型 inputtype=float32
+    // Input type: inputtype=float32
     case PROP_INPUTTYPE:
       status = _gtfc_setprop_TYPE (self, value, TRUE);
       break;
-    // 输出类型 outputtype=float32
+    // Output type: outputtype=float32
     case PROP_OUTPUTTYPE:
       status = _gtfc_setprop_TYPE (self, value, FALSE);
       break;
-    // 输出结果阈值及框图阈值 threshold=0.5:0.3
+    // Output result threshold and block diagram threshold: threshold=0.5:0.3
     case PROP_THRESHOLD:
       status = _gtfc_setprop_THRESHOLD (self, value);
       break;
-    // 配置线程数 numthreads=1
+    // Configuring thread count: numthreads=1
     case PROP_NUMTHREADS:
       status = 0;
       if (g_value_get_int (value) > 0)
         prop->num_threads = g_value_get_int (value);
       else
         status = -1;
+      break;
+    case PROP_IS_OUTPUT_SCALED:
+      self->prop.is_output_scaled = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -875,13 +885,13 @@ gst_sscma_yolov5_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
       w = data[delect_num * cIdx_max + 2];
       h = data[delect_num * cIdx_max + 3];
 
-      // todo:可配置是否归一化
-      // if (!is_output_scaled) {
-      //   cx *= (float) width;
-      //   cy *= (float) height;
-      //   w *= (float) width;
-      //   h *= (float) height;
-      // }
+      // If the output is scaled, then the coordinates need to be scaled
+      if (!prop->is_output_scaled) {
+        cx *= (float) width;
+        cy *= (float) height;
+        w *= (float) width;
+        h *= (float) height;
+      }
 
       object.x = (int) (MAX (0.f, (cx - w / 2.f))) * width / prop->input_meta.info[0].dimension[1];
       object.y = (int) (MAX (0.f, (cy - h / 2.f))) * height / prop->input_meta.info[0].dimension[2];

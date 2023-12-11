@@ -64,12 +64,13 @@ sscma_yolov5 model={model_path},{weights_path} numthreads={numthreads} input={in
 
 Options:
    --model=model_path,weights_path         Path to model file
-   --numthreads=numthreads                 Path to model numthreads (default: 4)
-   --input=input                           Path to model input format (default: 3:320:320)
-   --output=output                         Path to model output format (default: 85:6300:1:1)
-   --outputtype=outputtype                 Path to model output type (default: float32)
+   --numthreads=numthreads                 Configuring to model numthreads (default: 4)
+   --input=input                           Configuring to model input format (default: 3:320:320)
+   --output=output                         Configuring to model output format (default: 85:6300:1:1)
+   --outputtype=outputtype                 Configuring to model output type (default: float32)
    --labels=labels_path                    Path to model labels file
-   --threshold=threshold:threshold         Path to model threshold (default: 2500:0.25)
+   --threshold=threshold:threshold         Configuring to model threshold (default: 2500:0.25)
+   --is_output_scaled=is_output_scaled     Configuring to model output is scaled (default: false)
 ```
 ### 示例1
 ```bash
@@ -138,5 +139,5 @@ multifilesink为替换输出到文件，location=./result.json为输出文件路
 
 ## 待办事项
 - [X] 插件支持任意输入尺寸
-- [ ] 推理结果阈值可配置，模型输出是否归一化可配置
+- [X] 推理结果阈值可配置，模型输出是否归一化可配置
 - [X] 自动匹配两种输出格式 1：输出带框原始图片 2：输出json格式结果
