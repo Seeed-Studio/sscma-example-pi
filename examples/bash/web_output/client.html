@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Video Player Example</title>
+    <link href="https://vjs.zencdn.net/7.14.3/video-js.css" rel="stylesheet" />
+    <script src="https://vjs.zencdn.net/7.14.3/video.min.js"></script>
+  </head>
+  <body>
+    <video id="my-video" class="video-js vjs-default-skin" controls preload="auto" width="640" height="264" data-setup='{"fluid": true}'>
+      <source src="http://localhost:8000/playlist.m3u8" type="application/x-mpegURL" />
+    </video>
+    <script>
+     window.onload = function(){
+        var player = videojs('my-video');
+     }
+    </script>
+    <style>
+        html,body{
+            margin: 0 0 ;
+            padding:  0 0;
+        }
+    </style>
+  </body>
+</html>

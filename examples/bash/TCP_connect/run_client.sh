@@ -1,0 +1,2 @@
+gst-launch-1.0 udpsrc port=7001 caps="application/x-rtp,media=(string)video,clock-rate=(int)90000,encoding-name=(string)H264,payload=(int)96" \
+   ! rtph264depay ! h264parse config-interval=1 ! v4l2h264dec !  v4l2convert ! xvimagesink sync=false
