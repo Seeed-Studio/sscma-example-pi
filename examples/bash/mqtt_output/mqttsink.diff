@@ -1,0 +1,26 @@
+diff --git a/gst/mqtt/mqttsink.c b/gst/mqtt/mqttsink.c
+index 05216066..9a34da11 100644
+--- a/gst/mqtt/mqttsink.c
++++ b/gst/mqtt/mqttsink.c
+@@ -835,7 +835,7 @@ gst_mqtt_sink_render (GstBaseSink * basesink, GstBuffer * in_buf)
+     ret = GST_FLOW_ERROR;
+     goto ret_with;
+   }
+-  memcpy (msg_pub, &self->mqtt_msg_hdr, sizeof (self->mqtt_msg_hdr));
++  // memcpy (msg_pub, &self->mqtt_msg_hdr, sizeof (self->mqtt_msg_hdr));
+   _put_timestamp_to_msg_buf_hdr (self, in_buf, (GstMQTTMessageHdr *) msg_pub);
+ 
+   in_buf_mem = gst_buffer_get_all_memory (in_buf);
+@@ -851,10 +851,10 @@ gst_mqtt_sink_render (GstBaseSink * basesink, GstBuffer * in_buf)
+ 
+   ret = GST_FLOW_OK;
+ 
+-  memcpy (&msg_pub[sizeof (self->mqtt_msg_hdr)], in_buf_map.data,
++  memcpy (msg_pub, in_buf_map.data,
+       in_buf_map.size);
+   mqtt_rc = MQTTAsync_send (self->mqtt_client_handle, self->mqtt_topic,
+-      GST_MQTT_LEN_MSG_HDR + in_buf_map.size, self->mqtt_msg_buf,
++      in_buf_map.size, self->mqtt_msg_buf,
+       self->mqtt_qos, 1, &self->mqtt_respn_opts);
+   if (mqtt_rc != MQTTASYNC_SUCCESS) {
+     ret = GST_FLOW_ERROR;
