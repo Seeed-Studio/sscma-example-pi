@@ -7,11 +7,10 @@ This guide explains how to deploy a model trained with SSCMA (to be confirmed) o
 Before getting started, ensure that you have:
 
 1. A Raspberry Pi device with a correctly installed and configured operating system.
-2. Successfully installed the NCNN library and its dependencies. Installation instructions can be found on the [NCNN GitHub](https://github.com/Tencent/ncnn) page.
-3. The model files trained with SSCMA, including the configuration file and weight file.
-4. Gstreamer installed. Refer to the installation guide. Refer to the [Gstreamer installation guide](https://gstreamer.freedesktop.org/documentation/installing/on-linux.html?gi-language=c).
-5. Meson and Ninja build tools installed. Refer to the [Meson documentation](https://mesonbuild.com/Getting-meson.html).
-6. Json-glib library installed. Refer to the [Json-glib project page](https://wiki.gnome.org/Projects/JsonGlib).
+2. The model files trained with SSCMA, including the configuration file and weight file.
+3. Gstreamer installed. Refer to the installation guide. Refer to the [Gstreamer installation guide](https://gstreamer.freedesktop.org/documentation/installing/on-linux.html?gi-language=c).
+4. Meson and Ninja build tools installed. Refer to the [Meson documentation](https://mesonbuild.com/Getting-meson.html).
+5. Json-glib library installed. Refer to the [Json-glib project page](https://wiki.gnome.org/Projects/JsonGlib).
 
 
 ## Steps
@@ -37,17 +36,6 @@ Follow these steps to deploy the model on your Raspberry Pi:
 ## Example
 
 ### Building the Project
-Compile NCNN as a static library:
-```bash
-git clone https://github.com/Seeed-Studio/sscma-example-pi --recursive
-cd components/ncnn
-mkdir -p build-aarch64-linux-gnu
-pushd build-aarch64-linux-gnu
-cmake -DCMAKE_TOOLCHAIN_FILE=../toolchains/aarch64-linux-gnu.toolchain.cmake -DNCNN_OPENMP=OFF..
-make -j4
-make install
-popd
-```
 Compile and copy the gst-sscma-yolov5 plugin:
 ```bash
 meson build

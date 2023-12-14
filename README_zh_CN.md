@@ -7,11 +7,10 @@
 在开始之前，确保您具备以下内容：
 
 1. 一个树莓派设备，已正确安装并配置好操作系统。
-2. 已成功安装NCNN库和相关依赖项。可以在[NCNN GitHub](https://github.com/Tencent/ncnn)上找到安装说明。
-3. 经过SSCMA训练的模型文件（含配置文件，权重文件和标签文件）。
-4. 安装gstreamer。参考[这里](https://gstreamer.freedesktop.org/documentation/installing/on-linux.html?gi-language=c)。
-5. 安装meson和ninja编译工具。参考[这里](https://mesonbuild.com/Getting-meson.html)。
-6. 安装json-glib库。参考[这里](https://wiki.gnome.org/Projects/JsonGlib)。
+2. 经过SSCMA训练的模型文件（含配置文件，权重文件和标签文件）。
+3. 安装gstreamer。参考[这里](https://gstreamer.freedesktop.org/documentation/installing/on-linux.html?gi-language=c)。
+4. 安装meson和ninja编译工具。参考[这里](https://mesonbuild.com/Getting-meson.html)。
+5. 安装json-glib库。参考[这里](https://wiki.gnome.org/Projects/JsonGlib)。
 
 ## 步骤
 
@@ -36,17 +35,6 @@
 ## 示例
 
 ### 编译工程
-将ncnn编译为静态库
-```bash
-git clone https://github.com/Seeed-Studio/sscma-example-pi --recursive
-cd components/ncnn
-mkdir -p build-aarch64-linux-gnu
-pushd build-aarch64-linux-gnu
-cmake -DCMAKE_TOOLCHAIN_FILE=../toolchains/aarch64-linux-gnu.toolchain.cmake -DNCNN_OPENMP=OFF..
-make -j4
-make install
-popd
-```
 编译拷贝gst-sscma-yolov5插件
 ```bash
 meson build

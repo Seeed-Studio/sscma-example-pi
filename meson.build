@@ -39,13 +39,20 @@ gstsscmayolov5_include_dirs = [
   include_directories('src')
 ]
 
-library_dep=cxx.find_library('ncnn', dirs : join_paths(meson.source_root(),'components/ncnn/build-aarch64-linux-gnu/install/lib'))
-library_include_dir = 'components/ncnn/build-aarch64-linux-gnu/install/include/ncnn'
+cmake = import('cmake')
+ncnn_var = cmake.subproject_options()
+ncnn_var.add_cmake_defines({'NCNN_OPENMP': false})
+ncnn_var.add_cmake_defines({'NCNN_BUILD_TESTS': false})
+ncnn_var.add_cmake_defines({'NCNN_BUILD_TOOLS': false})
+ncnn_var.add_cmake_defines({'NCNN_BUILD_EXAMPLES': false})
+
+ncnn_proj = cmake.subproject('ncnn', options : ncnn_var)
+ncnn = ncnn_proj.dependency('ncnn')
 
 gstsscmayolov5 = library('gstsscmayolov5',
   gstsscmayolov5_sources,
-  include_directories : [gstsscmayolov5_include_dirs, library_include_dir],
-  dependencies : [gst_dep, gstbase_dep, gst_video_dep, library_dep, json_glib_dep],
+  include_directories : [gstsscmayolov5_include_dirs],
+  dependencies : [gst_dep, gstbase_dep, gst_video_dep, json_glib_dep, ncnn],
   install : true,
   install_dir : sscmayolov5_install_dir,
   c_args: ['-fpermissive',plugin_c_args],
