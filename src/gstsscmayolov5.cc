@@ -72,17 +72,9 @@
 GST_DEBUG_CATEGORY_STATIC (gst_sscma_yolov5_debug);
 #define GST_CAT_DEFAULT gst_sscma_yolov5_debug
 
-/* Filter signals and args */
-enum
-{
-  /* FILL ME */
-  LAST_SIGNAL
-};
-
 enum
 {
   PROP_0,
-  PROP_SILENT,
   PROP_INPUT,
   PROP_INPUTFORMAT,
   PROP_INPUTTYPE,
@@ -91,9 +83,8 @@ enum
   PROP_MODEL,
   PROP_MODE_LABELS,
   PROP_THRESHOLD,
-  PROP_OUTPUTRANKS,
   PROP_NUMTHREADS,
-  PROP_IS_OUTPUT_SCALED
+  PROP_IS_OUTPUT_SCALED,
 };
 
 /* the capabilities of the outputs.
@@ -152,52 +143,43 @@ gst_sscma_yolov5_class_init (GstSscmaYolov5Class * klass)
 
   g_object_class_install_property (gobject_class, PROP_MODEL,
       g_param_spec_string ("model", "Model filepath",
-          "File path to the model file. Separated with ',' in case of multiple model files(like caffe2)",
-          "", G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+          "File path to the model file. Separated with ',' in case of multiple model files",
+          "", G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_INPUT,
       g_param_spec_string ("input", "Input dimension",
           "Input tensor dimension from inner array (Max rank #NNS_TENSOR_RANK_LIMIT)",
-          "", G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+          "3:320:320", G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_OUTPUT,
       g_param_spec_string ("output", "Output dimension",
           "Output tensor dimension from inner array (Max rank #NNS_TENSOR_RANK_LIMIT)",
-          "", G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+          "85:6300:1:1", G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_OUTPUTTYPE,
       g_param_spec_string ("outputtype", "Output tensor element type",
-          "Type of each element of the output tensor ?", "",
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
-  g_object_class_install_property (gobject_class, PROP_OUTPUTRANKS,
-      g_param_spec_string ("outputranks", "Rank of Out Tensor",
-          "The Rank of the Out Tensor, which is separated with ',' in case of multiple Tensors",
-          "", G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+          "Type of each element of the output tensor ?", "float32",
+          G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_MODE_LABELS,
       g_param_spec_string ("labels", "Labels file",
           "Configure the Labels file path.", "",
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+          G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_THRESHOLD,
       g_param_spec_string ("threshold", "Threshold",
-          "Configure the threshold for detection.", "",
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+          "Configure the threshold for detection.", "2500:0.25",
+          G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_NUMTHREADS,
       g_param_spec_int ("numthreads", "Number of threads",
-          "Number of threads for NNFW", 1, 4, 1,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+          "Number of threads for NNFW", 1, 4, 4,
+          G_PARAM_WRITABLE));
 
   g_object_class_install_property (gobject_class, PROP_IS_OUTPUT_SCALED,
       g_param_spec_boolean ("is_output_scaled", "Is output scaled",
           "Is output scaled", TRUE,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
-  g_object_class_install_property (gobject_class, PROP_SILENT,
-      g_param_spec_boolean ("silent", "Silent", "Produce verbose output ?",
-          FALSE, G_PARAM_READWRITE));
+          G_PARAM_WRITABLE));
 
   /* set src pad template */
   pad_caps = gst_caps_new_empty ();
@@ -279,8 +261,6 @@ gst_properties_init(GstSscmaYolov5Properties *prop)
   prop->threshold[0] = 2500;
   prop->threshold[1] = 0.25;
   prop->threshold[2] = 0;
-  prop->input_configured = FALSE;
-  prop->output_configured = FALSE;
   prop->input_meta.num_tensors = 1;
   prop->input_ranks[0] = gst_tensor_parse_dimension ("3:320:320",
           prop->input_meta.info[0].dimension);
@@ -424,20 +404,17 @@ _gtfc_setprop_DIMENSION (GstSscmaYolov5 * priv,
   GstSscmaYolov5Properties *prop;
   GstTensorsInfo *info;
   unsigned int *rank;
-  int configured;
 
   prop = &priv->prop;
   if(is_input){
     info = &prop->input_meta;
     rank = prop->input_ranks;
-    configured = prop->input_configured;
   }else{
     info = &prop->output_meta;
     rank = prop->output_ranks;
-    configured = prop->output_configured;
   }
 
-  if (!configured && value) {
+  if (value) {
     guint num_dims;
     gchar **str_dims;
     guint i;
@@ -481,19 +458,16 @@ _gtfc_setprop_TYPE (GstSscmaYolov5 * priv,
 {
   GstSscmaYolov5Properties *prop;
   GstTensorsInfo *info;
-  int configured;
 
   prop = &priv->prop;
 
   if (is_input) {
     info = &prop->input_meta;
-    configured = prop->input_configured;
   } else {
     info = &prop->output_meta;
-    configured = prop->output_configured;
   }
 
-  if (!configured && value) {
+  if ( value) {
     guint num_types;
 
     num_types = gst_tensors_info_parse_types_string (info,
